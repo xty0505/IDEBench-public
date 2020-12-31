@@ -7,8 +7,8 @@ import pandas as pd
 
 class VizAction(BaseAction):
 
-    def __init__(self, config, df, vizgraph, storage, sample_json):
-        super().__init__(config, df, vizgraph, storage, sample_json)
+    def __init__(self, options, config, df, vizgraph, storage, sample_json):
+        super().__init__(options, config, df, vizgraph, storage, sample_json)
 
         self.dim_to_type = {}
         for field in sample_json["tables"]["fact"]["fields"]:
@@ -45,6 +45,8 @@ class VizAction(BaseAction):
                     d_bin["width"] = 1
                 except:
                     pass
+            elif self.dim_to_type[dimension["name"]] == "temporal":
+                pass
 
             bins.append(d_bin)
        

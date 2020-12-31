@@ -1,9 +1,14 @@
 import random
+from collections import OrderedDict
+
 import numpy as np
 import pprint
 import json
+
+from common.operation import Operation
 from workflowgen.vizaction import VizAction
 from workflowgen.linkaction import LinkAction
+from workflowgen.selectionaction import SelectionAction
 from optparse import OptionParser
 import pandas as pd
 from common.schema import Schema
@@ -17,13 +22,17 @@ class WorkflowGenerator:
     def __init__(self):
 
         parser = OptionParser()
-        parser.add_option("-r", "--seed", dest="seed", action="store", type=int, help="Random seed", default=25000)
+        parser.add_option("-r", "--seed", dest="seed", action="store", type=int, help="Random seed", default=15000)
         parser.add_option("-d", "--dataset", dest="data_folder", action="store", help="path to save the file", default="flights")
         parser.add_option("--debug", dest="debug", action="store_true", help="creates a debug file", default=False)
         parser.add_option("-n", "--num-operations", dest="num_operations", action="store", type=int, help="Number of operations to generate", default=20)
         parser.add_option("-c", "--workflow-type", dest="config", action="store", help="path to config file", default="data/flights/workflowtypes/sequential.json")
         parser.add_option("-p", "--output", dest="path", action="store", help="path to save the file", default="workflow.json")
         parser.add_option("-s", "--num-samples", dest="numsamples", action="store", type=int, help="Number of samples to draw from the original dataset", default=10000)
+        parser.add_option("--session", dest="session", action="store", type=int, help="Number of query in a session", default=5)
+        parser.add_option("--viz_n", dest="viz_number", action="store", type=int, help="Number of visualization", default=4)
+        parser.add_option("--upbound", dest="upbound", action="store", type=int, help="Number of maximum upbound", default=100)
+
         (options, args) = parser.parse_args()
         self.options = options
 
@@ -41,6 +50,11 @@ class WorkflowGenerator:
         print("reading csv...")
         # load sample data
         df = pd.read_csv("data/" + options.data_folder + "/sample.csv", nrows=options.numsamples, header=0)
+        columns = []
+        for c in df.columns:
+            column = '_'.join(c.split(' '))
+            columns.append(column)
+        df.columns = columns
         
         #schema = {"tables": [{ "name": "df", "dimensions": []}]}
         sample_json = None
@@ -52,66 +66,72 @@ class WorkflowGenerator:
 
         #storage = Storage(schema)
 
-        zero_qs_ratio = 100
+        if self.options.session > 0:
+            states = self.generate_session(df, schema, sample_json)
+        else:
+            zero_qs_ratio = 100
 
-        tries = -1
-        while zero_qs_ratio > 0.15:
-            tries += 1
-            num_zeros_qs = 0
-            num_qs = 0
-            VizAction.VIZ_COUNTER = -1  
-            LinkAction.FIRST_LINK = None
-            LinkAction.LATEST_LINK = None
-            LinkAction.LINKS = set()
-            
-            vizgraph = VizGraph()
-            random.seed(options.seed + tries)
-            root = VizAction(self.config, df, vizgraph, schema, sample_json)
-            current = root
-            states = []
-            
-            num_ops = 0
-            
-            debug_states = []
-            while num_ops < options.num_operations:
-                res = current.get_states()
-                if res:                 
-                    affected_vizs = vizgraph.apply_interaction(res)
-                    if options.debug:
-                        nodes_dict = vizgraph.get_nodes_dict()
-                        states_dict = {}
-                        for n in nodes_dict.keys():
-                            states_dict[n] = {
-                                "name":n,
-                                "source" : nodes_dict[n].get_source(),
-                                "binning":  nodes_dict[n].binning,
-                                "agg": nodes_dict[n].per_bin_aggregates,
-                                "selection": nodes_dict[n].get_selection(),
-                                "filter": nodes_dict[n].get_filter(),
-                                "computed_filter": nodes_dict[n].get_computed_filter_as_sql(schema),
-                            }
-                        debug_states.append(states_dict)
-                    
-                    for x in affected_vizs:
-                        sql = x.get_computed_filter_as_sql(schema).replace("FLOOR", "ROUND").replace(schema.get_fact_table_name(), "df")
-                        r = pandasql.sqldf(sql, locals())
-                        num_qs += 1
-                        if len(r.index) == 0:
-                            num_zeros_qs += 1
+            tries = -1
+            while zero_qs_ratio > 0.8:
+                tries += 1
+                num_zeros_qs = 0
+                num_qs = 0
+                VizAction.VIZ_COUNTER = -1
+                LinkAction.FIRST_LINK = None
+                LinkAction.LATEST_LINK = None
+                LinkAction.LINKS = set()
 
-                    states.append(res.data)
-                    #if "source" not in res:
-                    num_ops += 1
+                vizgraph = VizGraph()
+                random.seed(options.seed + tries)
+                root = VizAction(self.config, df, vizgraph, schema, sample_json)
+                current = root
+                states = []
 
-                current = current.get_next()
-                if current is None:
-                    zero_qs_ratio = num_zeros_qs/num_qs
-                    break
-            zero_qs_ratio = num_zeros_qs/num_qs
+                num_ops = 0
+
+                debug_states = []
+                while num_ops < options.num_operations:
+                    print(num_ops)
+                    res = current.get_states()
+                    if res:
+                        affected_vizs = vizgraph.apply_interaction(res)
+                        if options.debug:
+                            nodes_dict = vizgraph.get_nodes_dict()
+                            states_dict = {}
+                            for n in nodes_dict.keys():
+                                states_dict[n] = {
+                                    "name":n,
+                                    "source" : nodes_dict[n].get_source(),
+                                    "binning":  nodes_dict[n].binning,
+                                    "agg": nodes_dict[n].per_bin_aggregates,
+                                    "selection": nodes_dict[n].get_selection(),
+                                    "filter": nodes_dict[n].get_filter(),
+                                    "computed_filter": nodes_dict[n].get_computed_filter_as_sql(schema),
+                                }
+                            debug_states.append(states_dict)
+
+                        for x in affected_vizs:
+                            sql = x.get_computed_filter_as_sql(schema).replace("FLOOR", "ROUND").replace(schema.get_fact_table_name(), "df")
+                            r = pandasql.sqldf(sql, locals())
+                            num_qs += 1
+                            if len(r.index) == 0:
+                                num_zeros_qs += 1
+
+                        states.append(res.data)
+                        #if "source" not in res:
+                        num_ops += 1
+
+                    current = current.get_next()
+                    if current is None:
+                        zero_qs_ratio = num_zeros_qs/num_qs
+                        break
+                zero_qs_ratio = num_zeros_qs/num_qs
+                print(zero_qs_ratio)
         
 
         with open("data/" + options.data_folder +  "/workflows/" + options.path + ".json", "w") as fp:
-            fp.write(json.dumps({"name": "generated", "dataset": options.data_folder, "seed": options.seed, "config": options.config, "interactions": states}))
+            # fp.write(json.dumps({"name": "generated", "dataset": options.data_folder, "seed": options.seed, "config": options.config, "interactions": states}))
+            json.dump({"name": "generated", "dataset": options.data_folder, "seed": options.seed, "config": options.config, "interactions": states}, fp, indent=4)
 
         print("done.")
         #with open("workflowviewer/public/workflow.json", "w") as fp:
@@ -130,5 +150,67 @@ class WorkflowGenerator:
 
     def get_viz_name(self):
         return "viz_%i" % self.config["viz_counter"]
+
+    # session
+    def generate_session(self, df, schema, sample_json):
+        tries = -1
+        num_ops = 0
+        num_query = 0
+        states = []
+        vizgraph = VizGraph()
+        self.init_viz(vizgraph, states, df, schema, sample_json)
+
+        current = SelectionAction(self.options, self.config, df, vizgraph, schema, sample_json)
+        while num_ops < self.options.num_operations:
+            tries += 1
+            random.seed(self.options.seed + tries)
+            print(num_ops)
+            if num_query >= self.options.session:
+                vizgraph = self.reset_session(vizgraph)
+                self.init_viz(vizgraph, states, df, schema, sample_json)
+                current = SelectionAction(self.options, self.config, df, vizgraph, schema, sample_json)
+                num_query = 0
+
+            res = current.get_states()
+
+            if res:
+                affected_vizs = vizgraph.apply_interaction(res)
+                for viz in affected_vizs:
+                    print(num_query)
+                    if num_query >= self.options.session:
+                        break
+                    operation = Operation(OrderedDict({"name": ("%s" % viz.name), "filter": viz.computed_filter}))
+                    states.append(operation.data)
+
+                    num_query += 1
+                    num_ops += 1
+
+            current = current.get_next()
+        return states
+
+    def init_viz(self, vizgraph, states, df, schema, sample_json):
+        # VizAction
+        for i in range(self.options.viz_number):
+            viz = VizAction(self.options, self.config, df, vizgraph, schema, sample_json)
+            res = viz.get_states()
+            vizgraph.apply_interaction(res)
+            states.append(res.data)
+        # LinkAction
+        link = LinkAction(self.options, self.config, df, vizgraph, schema, sample_json)
+        res = link.get_states()
+        while res:
+            vizgraph.apply_interaction(res)
+            # states.append(res.data)
+            link = LinkAction(self.options, self.config, df, vizgraph, schema, sample_json)
+            res = link.get_states()
+
+    def reset_session(self, vizgraph):
+        vizgraph = VizGraph()
+        VizAction.VIZ_COUNTER = -1
+        LinkAction.FIRST_LINK = None
+        LinkAction.LATEST_LINK = None
+        LinkAction.LINKS = set()
+
+        return vizgraph
 
 WorkflowGenerator()

@@ -104,22 +104,25 @@ class DataGen:
          # load sample data
         self.df = pd.read_csv(self.options.samplefile, nrows=self.options.numsamples, header=0)
 
+        # quantitative类型的列减去该列最小值
         if self.options.prevent_zero:
             self.quant_col_names = [ col["field"] for col in self.sample_json["tables"]["fact"]["fields"] if col["type"] == "quantitative" ]
             for quant_col_name in self.quant_col_names:
                 self.df[quant_col_name] = self.df[quant_col_name] - self.df[quant_col_name].min()
 
+        # categorical类型的列 df类型转换为category
         self.cat_col_names = [ col["field"] for col in self.sample_json["tables"]["fact"]["fields"] if col["type"] == "categorical" ]
         for cat_col_name in self.cat_col_names:
             self.df[cat_col_name] = self.df[cat_col_name].astype("category")
 
+        # 具有二级分组的列(json中有 deriveFrom 字段) groupby 一级组
         self.derived_cols = [ col for col in self.sample_json["tables"]["fact"]["fields"] if "deriveFrom" in col ]
         self.derivates = {}
         for derived_col in self.derived_cols:
             kk = self.df.groupby(derived_col["deriveFrom"])[derived_col["field"]].first().to_dict()
             self.derivates[derived_col["field"]] = kk
 
-   
+        # category类型的列计算其 histogram
         self.orgdf = self.df.copy()
         self.cat_cols = list(self.orgdf.select_dtypes(include=["category"]).columns)
         self.cat_hists = {}
@@ -137,10 +140,11 @@ class DataGen:
         self.stdevs = self.df.std()
         np.set_printoptions(suppress=True)
 
-        # z-normalize all data
+        # z-normalize all data (z标准化/标准差标准化, 经过处理的数据符合标准正态分布)
         for idx, col in enumerate(self.df.columns):
             self.df[col] = (self.df[col] - self.means[col])/self.stdevs[col]
-        
+
+        # 计算所有非categorical 类型列的逆 cdf 函数(x: cdf, y: bin_edges)
         self.inv_cdfs = self.get_inverse_cdfs(self.orgdf, self.df)
         
         # apply a gaussian copula

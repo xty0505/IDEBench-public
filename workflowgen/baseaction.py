@@ -4,7 +4,8 @@ import numpy as np
 
 class BaseAction:
 
-    def __init__(self, config, df, vizgraph, storage, sample_json):
+    def __init__(self, options, config, df, vizgraph, storage, sample_json):
+        self.options = options
         self.config = config
         self.df = df
         self.vizgraph = vizgraph
@@ -15,7 +16,7 @@ class BaseAction:
         pick = self.pick(self.config["nextAction"]["values"], self.config["nextAction"]["pd"])
         pick_split = pick.split(".")
         module = importlib.import_module(pick_split[0] + "." + pick_split[1])
-        return getattr(module, pick_split[2])(self.config, self.df, self.vizgraph, self.storage, self.sample_json) 
+        return getattr(module, pick_split[2])(self.options, self.config, self.df, self.vizgraph, self.storage, self.sample_json)
 
     def get_states(self):
         return []

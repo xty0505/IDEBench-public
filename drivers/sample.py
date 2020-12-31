@@ -25,7 +25,7 @@ class IDEBenchDriver:
         
         # print SQL translation of request and simulate query execution
         print(viz_request.viz.get_computed_filter_as_sql(schema))
-        time.sleep(1)
+        #time.sleep(1)
 
         # record end time
         viz_request.end_time = util.get_current_ms_time() 

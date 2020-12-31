@@ -1,5 +1,7 @@
 import random
 import math
+from datetime import datetime
+
 import numpy as np
 import pandasql
 from collections import OrderedDict
@@ -42,6 +44,7 @@ class FilterAction(BaseAction):
                     num_bins = 1
                 else:
                     num_bins = random.randint(1, max_index-min_index) if max_index > min_index else 1
+                num_bins = num_bins if num_bins <= self.options.upbound else self.options.upbound
                 selected_bins = np.random.choice(np.arange(min_index, max_index + 1), size=num_bins, replace=False)
                 
                 for selected_bin in selected_bins:
@@ -49,14 +52,22 @@ class FilterAction(BaseAction):
                     range_max = (selected_bin + 1) * bin_width
                     filt = "(%s >= %s and %s < %s)" % (dim, '{:.1f}'.format(range_min), dim, '{:.1f}'.format(range_max))
                     filters.append(filt)
-            else:
+            elif field["type"] == "categorical":
                 all_bins = df_result[dim].unique().tolist()
                 num_bins = random.randint(1, len(all_bins))
+                num_bins = num_bins if num_bins <= self.options.upbound else self.options.upbound
                 selected_bins = np.random.choice(all_bins, size=num_bins, replace=False)
-                for selected_bin in list(selected_bins):
-                    filt =  "(%s = '%s')" % (dim, selected_bin)
-                    filters.append(filt)
+                # for selected_bin in list(selected_bins):
+                #     filt =  "(%s = '%s')" % (dim, selected_bin)
+                #     filters.append(filt)
+                filters.append("%s IN (%s)" % (dim, ','.join(["'%s'" % x for x in selected_bins])))
+            elif field["type"] == "temporal":
+                index1 = np.random.randint(0, len(df_result)/2)
+                index2 = np.random.randint(len(df_result)/2, len(df_result))
+                date1 = datetime.strptime(df_result.iloc[index1][dim], "%m/%d/%Y %H:%M:%S %p")
+                date2 = datetime.strptime(df_result.iloc[index2][dim], "%m/%d/%Y %H:%M:%S %p")
+                filters.append("%s BETWEEN %s and %s" % (dim, min(date1.year, date2.year), max(date1.year, date2.year)))
             filter_per_dim.append(" or ".join(filters))
-        filter_per_dim = ["(%s)" % f for f in filter_per_dim]
+        filter_per_dim = ["%s" % f for f in filter_per_dim]
                             
-        return Operation(OrderedDict({"name": ("viz_%s" % src_viz_num), "filter": " and ".join(filter_per_dim)}))
+        return Operation(OrderedDict({"name": ("viz_%s" % src_viz_num), "filter": " AND ".join(filter_per_dim)}))

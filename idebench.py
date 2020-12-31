@@ -42,6 +42,7 @@ class IDEBench:
         parser.add_option("--run-config", dest="config", action="store", help="Flag to run the benchmark with the specified config file")
         parser.add_option("--groundtruth", dest="groundtruth", action="store_true", help="If set computes the ground-truth for the specified workflow", default=False)
 
+        parser.add_option("--viz_n", dest="viz_number", action="store", type=int, help="Number of visualization", default=4)
         (self.options, args) = parser.parse_args()
 
         if not self.options.config:
@@ -146,7 +147,7 @@ class IDEBench:
         with open(self.get_workflow_path()) as f:
             self.workflow_interactions = json.load(f)["interactions"]
 
-        self.vizgraph = VizGraph()
+        self.vizgraph = VizGraph(self.options.viz_number)
         self.operation_results = { "args": vars(self.options), "results": {} }
         self.current_interaction_index = 0
         self.current_vizrequest_index = 0
@@ -163,12 +164,12 @@ class IDEBench:
         
         if not self.options.groundtruth:
             with open(path, "w") as fp:
-                json.dump(self.operation_results, fp)
+                json.dump(self.operation_results, fp, indent=4)
 
         if self.options.groundtruth:
             path = "data/%s/groundtruths/%s_%s.json" % (self.options.settings_dataset, self.options.settings_size, self.options.settings_workflow)
             with open(path, "w") as fp:
-                json.dump(self.operation_results, fp)
+                json.dump(self.operation_results, fp, indent=4)
     
     def process_interaction(self, interaction_index):
         print("processing!")

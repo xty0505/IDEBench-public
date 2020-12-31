@@ -1,3 +1,4 @@
+import re
 from collections import defaultdict
 from collections import deque
 from collections import OrderedDict
@@ -6,14 +7,19 @@ from common.viz import Viz
 
 class VizGraph(object):
 
-    def __init__(self):
+    def __init__(self, viz_n=0):
         self._graph = OrderedDict()
         self.nodes = set()
+        self.viz_n = viz_n
 
     def apply_interaction(self, operation):
         # initialize a set of vizs that are affected by this operation
         vizs_to_request = OrderedDict()
-        
+
+        if self.viz_n > 0:
+            if len(self.nodes) >= self.viz_n and "binning" in operation.data:
+                self.nodes = set()
+
         if operation.get_viz_name() not in self.get_nodes_dict():
             viz = Viz.createFromDict(operation.data)
             self.nodes.add(viz)
@@ -59,7 +65,7 @@ class VizGraph(object):
 
         # parse selection
         if operation.has_selection():
-            current_viz.selection = operation.get_selection()
+            current_viz.filter = operation.get_selection()
 
             # find other vizs affected by this selection
             vizs_to_request.update(self.update_affected_vizs(current_viz, viz_dict))
@@ -114,14 +120,15 @@ class VizGraph(object):
         filters = []
         compute_filter_inner(viz, selections, filters, source_strs_list)
         
-        source_strs = " and ".join(source_strs_list)
+        source_strs = " AND ".join(source_strs_list)
         
         for src in source_strs_list:
             if src in selections:                
                 source_strs = source_strs.replace(src, selections[src])
             else:
                 source_strs = source_strs.replace(src, "NULL")
-        source_strs = source_strs.replace("and NULL", "").replace("NULL and", "").replace("or NULL", "").replace("NULL or", "").replace("NULL", "").strip().lstrip("and ")
+        source_strs = source_strs.replace("AND NULL", "").replace("NULL AND", "").replace("or NULL", "").replace("NULL or", "").replace("NULL", "").strip()
+        source_strs = re.sub("^AND ", "", source_strs)
         if len(source_strs) > 0 and len(filters) > 0:
             source_strs += " AND "
         return source_strs + " AND ".join(filters)
