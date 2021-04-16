@@ -62,9 +62,12 @@ class SelectionAction(BaseAction):
                     filters.append(filt)
             elif field["type"] == "categorical":
                 all_bins = df_result[dim].unique().tolist()
+                # for crossfilter
+                if len(all_bins) == 1:
+                    all_bins = df[dim].unique().tolist()
                 num_bins = random.randint(1, len(all_bins))
                 num_bins = num_bins if num_bins <= self.options.upbound else self.options.upbound
-                num_bins = 1 # for crossfilter
+                # num_bins = 1 # for crossfilter
                 selected_bins = np.random.choice(all_bins, size=num_bins, replace=False)
                 # for selected_bin in list(selected_bins):
                 #     filt =  "(%s = '%s')" % (dim, selected_bin)

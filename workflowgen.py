@@ -35,7 +35,7 @@ class WorkflowGenerator:
         parser.add_option("--cf", dest="cf", action='store_true', help='Whether to generate crossfilter workload', default=False)
         parser.add_option("--session", dest="session", action="store", type=int, help="Number of query in a session", default=5)
         parser.add_option("--viz-n", dest="viz_number", action="store", type=int, help="Number of visualization", default=4)
-        parser.add_option("--upbound", dest="upbound", action="store", type=int, help="Number of maximum upbound", default=100)
+        parser.add_option("--upbound", dest="upbound", action="store", type=int, help="Number of maximum upbound", default=4)
 
         (options, args) = parser.parse_args()
         self.options = options
