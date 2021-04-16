@@ -190,9 +190,51 @@ class WorkflowGenerator:
 
     def init_cf(self, vizgraph, states, df, schema, sample_json):
         # initialize visualizations
-        for i in range(self.options.viz_number):
-            viz = VizAction(self.options, self.config, df, vizgraph, schema, sample_json)
-            res = viz.get_states()
+        dim_to_type = {}
+        for field in sample_json["tables"]["fact"]["fields"]:
+            dim_to_type[field["field"]] = field["type"]
+        dims = list(self.config['dimensions'])
+        selected_dims = np.random.choice(dims, size=self.options.viz_number, replace=False)
+        for dim in selected_dims:
+            d_bin = {'dimension': dim['name']}
+            if dim_to_type[dim["name"]] == "quantitative":
+                dim_max_val = df[dim["name"]].max()
+                dim_min_val = df[dim["name"]].min()
+                #d_bin["width"] = round(random.uniform(0.025, 0.1) * (dim_max_val - dim_min_val))
+                d_bin["width"] = round(random.uniform(0.025, 0.1) * (dim_max_val - dim_min_val))
+            elif dim_to_type[dim["name"]] == "categorical":
+                try:
+                    pd.to_numeric(df[dim["name"]])
+                    d_bin["width"] = 1
+                except:
+                    pass
+            elif dim_to_type[dim["name"]] == "temporal":
+                pass
+
+            def pick(choices, pd=None):
+                if pd is None:
+                    return random.choice(choices)
+
+                total = sum(pd)
+                r = random.uniform(0, total)
+                upto = 0
+                for i, c in enumerate(choices):
+                    if upto + pd[i] >= r:
+                        return c
+                    upto += pd[i]
+                assert False, "Shouldn't get here"
+
+            per_bin_aggregate_type = pick(self.config["perBinAggregates"]["values"], self.config["perBinAggregates"]["pd"])
+            per_bin_aggregate = {"type": per_bin_aggregate_type}
+            if per_bin_aggregate_type == "avg":
+                avg_dimension = pick([d for d in sample_json["tables"]["fact"]["fields"] if (d["type"] == "quantitative")])
+                per_bin_aggregate["dimension"] = avg_dimension["field"]
+
+            VizAction.VIZ_COUNTER += 1
+            self.viz_name = "viz_%s" % VizAction.VIZ_COUNTER
+            self.binning = [d_bin]
+            self.perBinAggregates = [per_bin_aggregate]
+            res = Operation(OrderedDict({"name": self.viz_name, "binning": self.binning, "perBinAggregates": self.perBinAggregates}))
             vizgraph.apply_interaction(res)
             states.append(res.data)
         # make links between all viz
