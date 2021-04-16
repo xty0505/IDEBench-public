@@ -65,9 +65,10 @@ class VizGraph(object):
 
         # parse selection
         if operation.has_selection():
-            current_viz.filter = operation.get_selection()
+            current_viz.selection = operation.get_selection()
 
             # find other vizs affected by this selection
+            vizs_to_request[current_viz] = True
             vizs_to_request.update(self.update_affected_vizs(current_viz, viz_dict))
             
         current_viz.set_computed_filter(self.compute_filter(current_viz, viz_dict))
@@ -97,8 +98,9 @@ class VizGraph(object):
 
     def compute_filter(self, viz, viz_dict):
 
-        def compute_filter_inner(start, selections, filter_strs, source_strs):
+        def compute_filter_inner(start, selections, filter_strs, source_strs, visited):
 
+            visited.add(start.name)
             if start.has_filter():
                 filter_strs.append(start.filter)
 
@@ -109,16 +111,20 @@ class VizGraph(object):
                 return
                 
 
-            source_strs.extend(start.get_source_vizs())
+            # source_strs.extend(start.get_source_vizs())
+            for source in start.get_source_vizs():
+                source_strs.add(source)
             sources = start.get_source_vizs()
 
             for src in sources:
-                compute_filter_inner(viz_dict[src], selections, filter_strs, source_strs)
+                if src not in visited:
+                    compute_filter_inner(viz_dict[src], selections, filter_strs, source_strs, visited)
 
-        source_strs_list = []
+        source_strs_list = set()
         selections = {}
         filters = []
-        compute_filter_inner(viz, selections, filters, source_strs_list)
+        visited = set()
+        compute_filter_inner(viz, selections, filters, source_strs_list, visited)
         
         source_strs = " AND ".join(source_strs_list)
         
@@ -181,5 +187,6 @@ class VizGraph(object):
             result.append(node)
             if node in self._graph:
                 for n in self._graph[node].keys():
-                    queue.append(n)
+                    if n not in result and n not in queue:
+                        queue.append(n)
         return result[1:]

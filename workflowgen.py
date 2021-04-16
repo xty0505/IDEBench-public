@@ -13,7 +13,7 @@ from optparse import OptionParser
 import pandas as pd
 from common.schema import Schema
 from common.vizgraph import VizGraph
-#from common.storage import Storage
+# from common.storage import Storage
 import pandasql
 
 
@@ -29,8 +29,12 @@ class WorkflowGenerator:
         parser.add_option("-c", "--workflow-type", dest="config", action="store", help="path to config file", default="data/flights/workflowtypes/sequential.json")
         parser.add_option("-p", "--output", dest="path", action="store", help="path to save the file", default="workflow.json")
         parser.add_option("-s", "--num-samples", dest="numsamples", action="store", type=int, help="Number of samples to draw from the original dataset", default=10000)
+
+        # crossfilter
+        parser.add_option("--qn", dest="num_queries", action='store', type=int, help="Number of queries to generate", default=100)
+        parser.add_option("--cf", dest="cf", action='store_true', help='Whether to generate crossfilter workload', default=False)
         parser.add_option("--session", dest="session", action="store", type=int, help="Number of query in a session", default=5)
-        parser.add_option("--viz_n", dest="viz_number", action="store", type=int, help="Number of visualization", default=4)
+        parser.add_option("--viz-n", dest="viz_number", action="store", type=int, help="Number of visualization", default=4)
         parser.add_option("--upbound", dest="upbound", action="store", type=int, help="Number of maximum upbound", default=100)
 
         (options, args) = parser.parse_args()
@@ -49,7 +53,7 @@ class WorkflowGenerator:
 
         print("reading csv...")
         # load sample data
-        df = pd.read_csv("data/" + options.data_folder + "/sample.csv", nrows=options.numsamples, header=0)
+        df = pd.read_csv("data/" + options.data_folder + "/sample1.csv", nrows=options.numsamples, header=0)
         columns = []
         for c in df.columns:
             column = '_'.join(c.split(' '))
@@ -66,8 +70,8 @@ class WorkflowGenerator:
 
         #storage = Storage(schema)
 
-        if self.options.session > 0:
-            states = self.generate_session(df, schema, sample_json)
+        if self.options.cf:
+            states = self.generate_cf_workloads(df, schema, sample_json)
         else:
             zero_qs_ratio = 100
 
@@ -83,7 +87,7 @@ class WorkflowGenerator:
 
                 vizgraph = VizGraph()
                 random.seed(options.seed + tries)
-                root = VizAction(self.config, df, vizgraph, schema, sample_json)
+                root = VizAction(self.options, self.config, df, vizgraph, schema, sample_json)
                 current = root
                 states = []
 
@@ -127,7 +131,6 @@ class WorkflowGenerator:
                         break
                 zero_qs_ratio = num_zeros_qs/num_qs
                 print(zero_qs_ratio)
-        
 
         with open("data/" + options.data_folder +  "/workflows/" + options.path + ".json", "w") as fp:
             # fp.write(json.dumps({"name": "generated", "dataset": options.data_folder, "seed": options.seed, "config": options.config, "interactions": states}))
@@ -151,20 +154,76 @@ class WorkflowGenerator:
     def get_viz_name(self):
         return "viz_%i" % self.config["viz_counter"]
 
+    # crossfilter
+    def generate_cf_workloads(self, df, schema, sample_json):
+        tries = -1
+        num_ops = 0
+        num_query = 0
+        states = []
+        sqls = []
+        vizgraph = VizGraph()
+        self.init_cf(vizgraph, states, df, schema, sample_json)
+
+        current = SelectionAction(self.options, self.config, df, vizgraph, schema, sample_json)
+        while num_ops < self.options.num_operations and num_query < self.options.num_queries:
+            res = current.get_states()
+            if res:
+                affected_vizs = vizgraph.apply_interaction(res)
+                for viz in affected_vizs:
+                    tries += 1
+                    random.seed(self.options.seed + tries)
+                    np.random.seed(self.options.seed + tries)
+                    operation = Operation(OrderedDict({"name": ("%s" % viz.name), "filter": viz.computed_filter}))
+                    states.append(operation.data)
+                    sqls.append(viz.get_computed_filter_as_sql(schema))
+                    num_query += 1
+                    print(num_query)
+            num_ops += 1
+            current = current.get_next()
+        with open("data/" + self.options.data_folder + "/workflows/" + self.options.path + ".txt", "w") as f:
+            for sql in sqls:
+                f.write(sql)
+                f.write('\n')
+            f.close()
+
+        return states
+
+    def init_cf(self, vizgraph, states, df, schema, sample_json):
+        # initialize visualizations
+        for i in range(self.options.viz_number):
+            viz = VizAction(self.options, self.config, df, vizgraph, schema, sample_json)
+            res = viz.get_states()
+            vizgraph.apply_interaction(res)
+            states.append(res.data)
+        # make links between all viz
+        for i in range(VizAction.VIZ_COUNTER + 1):
+            for j in range(i + 1, VizAction.VIZ_COUNTER + 1):
+                LinkAction.LINKS.add((i, j))
+                LinkAction.LINKS.add((j, i))
+                incoming_links = ["viz_" + str(l[0]) for l in filter(lambda x: x[1] == i, LinkAction.LINKS)]
+                combined_filters = Operation(
+                    OrderedDict({"name": "viz_" + str(i), "source": (" and ".join(incoming_links))}))
+                vizgraph.apply_interaction(combined_filters)
+                incoming_links = ["viz_" + str(l[0]) for l in filter(lambda x: x[1] == j, LinkAction.LINKS)]
+                combined_filters = Operation(
+                    OrderedDict({"name": "viz_" + str(j), "source": (" and ".join(incoming_links))}))
+                vizgraph.apply_interaction(combined_filters)
+
     # session
     def generate_session(self, df, schema, sample_json):
         tries = -1
         num_ops = 0
         num_query = 0
         states = []
+        sqls = []
         vizgraph = VizGraph()
         self.init_viz(vizgraph, states, df, schema, sample_json)
 
         current = SelectionAction(self.options, self.config, df, vizgraph, schema, sample_json)
         while num_ops < self.options.num_operations:
-            tries += 1
             random.seed(self.options.seed + tries)
-            print(num_ops)
+            np.random.seed(seed=self.options.seed + tries)
+            # print(num_ops)
             if num_query >= self.options.session:
                 vizgraph = self.reset_session(vizgraph)
                 self.init_viz(vizgraph, states, df, schema, sample_json)
@@ -176,16 +235,28 @@ class WorkflowGenerator:
             if res:
                 affected_vizs = vizgraph.apply_interaction(res)
                 for viz in affected_vizs:
-                    print(num_query)
+                    tries += 1
+                    # print(num_query)
                     if num_query >= self.options.session:
                         break
                     operation = Operation(OrderedDict({"name": ("%s" % viz.name), "filter": viz.computed_filter}))
                     states.append(operation.data)
+                    sqls.append(viz.get_computed_filter_as_sql(schema))
 
                     num_query += 1
                     num_ops += 1
 
+                    if num_ops % self.options.session == 0:
+                        print('session %d done.' % (num_ops / self.options.session))
+
             current = current.get_next()
+
+        with open("data/" + self.options.data_folder + "/workflows/" + self.options.path + ".txt", "w") as f:
+            for sql in sqls:
+                f.write(sql)
+                f.write('\n')
+            f.close()
+
         return states
 
     def init_viz(self, vizgraph, states, df, schema, sample_json):
