@@ -58,7 +58,7 @@ class SelectionAction(BaseAction):
                     print(src_viz.name + ' addBrush')
                     first_idx = random.randint(0, bin_width - 1)
                     last_idx = random.randint(first_idx, bin_width - 1)
-                    selected_bins = (first_idx, last_idx + 1)
+                    selected_bins = (first_idx, last_idx)
                 else:
                     first_idx = (cur_min-all_min)//bin_width
                     last_idx = (cur_max-all_min)//bin_width
@@ -66,15 +66,15 @@ class SelectionAction(BaseAction):
                     if interaction < 0.3:
                         print(src_viz.name + ' adjustBrushRange from left')
                         possible = random.randint(0, last_idx)
-                        selected_bins = (possible, last_idx+1)
+                        selected_bins = (possible, last_idx)
                     elif interaction < 0.6:
                         print(src_viz.name + ' dragBrush')
                         possible = random.randint(0, bin_width-(last_idx-first_idx+1))
-                        selected_bins = (possible, possible+(last_idx-first_idx)+1)
+                        selected_bins = (possible, possible+(last_idx-first_idx))
                     else:
                         print(src_viz.name + ' adjustBrushRange from right')
                         possible = random.randint(first_idx, bin_width-1)
-                        selected_bins = (first_idx, possible+1)
+                        selected_bins = (first_idx, possible)
                 range_min = selected_bins[0] * 10 + all_min
                 range_max = selected_bins[1] * 10 + all_min
                 filt = "(%s >= %s and %s < %s)" % (dim, '{:.1f}'.format(range_min), dim, '{:.1f}'.format(range_max))
@@ -137,7 +137,7 @@ class SelectionAction(BaseAction):
                     print(src_viz.name + ' addBrush')
                     first_idx = random.randint(0, len(all_bins)-1)
                     last_idx = random.randint(first_idx, len(all_bins)-1)
-                    selected_bins = (first_idx, last_idx+1)
+                    selected_bins = (first_idx, last_idx)
                 else:
                     first_idx = all_bins.index(cur_bins[0])
                     last_idx = all_bins.index(cur_bins[-1])
@@ -145,15 +145,15 @@ class SelectionAction(BaseAction):
                     if interaction < 0.3:
                         print(src_viz.name + ' adjustBrushRange from left')
                         possible = random.randint(0, last_idx)
-                        selected_bins = (possible, last_idx+1)
+                        selected_bins = (possible, last_idx)
                     elif interaction < 0.6:
                         print(src_viz.name + ' dragBrush')
                         possible = random.randint(0, len(all_bins)-len(cur_bins))
-                        selected_bins = (possible, possible+len(cur_bins))
+                        selected_bins = (possible, possible+len(cur_bins)-1)
                     else:
                         print(src_viz.name + ' adjustBrushRange from right')
                         possible = random.randint(first_idx, len(all_bins)-1)
-                        selected_bins = (first_idx, possible+1)
+                        selected_bins = (first_idx, possible)
                 format = "%Y-%m-%d %H:%M:%S"
                 date1 = datetime.strptime(all_bins[selected_bins[0]][:-6], "%Y-%m-%d %H:%M:%S")
                 date2 = datetime.strptime(all_bins[selected_bins[1]][:-6], "%Y-%m-%d %H:%M:%S")
