@@ -164,9 +164,10 @@ class WorkflowGenerator:
         vizgraph = VizGraph()
         self.init_cf(vizgraph, states, df, schema, sample_json)
 
+        affected_vizs = [None]
         current = SelectionAction(self.options, self.config, df, vizgraph, schema, sample_json)
         while num_ops < self.options.num_operations and num_query < self.options.num_queries:
-            res = current.get_states()
+            res = current.get_states(list(affected_vizs)[0])
             if res:
                 affected_vizs = vizgraph.apply_interaction(res)
                 for viz in affected_vizs:
@@ -200,8 +201,7 @@ class WorkflowGenerator:
             if dim_to_type[dim["name"]] == "quantitative":
                 dim_max_val = df[dim["name"]].max()
                 dim_min_val = df[dim["name"]].min()
-                #d_bin["width"] = round(random.uniform(0.025, 0.1) * (dim_max_val - dim_min_val))
-                d_bin["width"] = round(random.uniform(0.025, 0.1) * (dim_max_val - dim_min_val))
+                d_bin["width"] = round(0.1 * (dim_max_val - dim_min_val))+1# bin 区间大小为10
             elif dim_to_type[dim["name"]] == "categorical":
                 try:
                     pd.to_numeric(df[dim["name"]])

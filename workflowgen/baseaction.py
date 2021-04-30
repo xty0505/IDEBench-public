@@ -18,7 +18,7 @@ class BaseAction:
         module = importlib.import_module(pick_split[0] + "." + pick_split[1])
         return getattr(module, pick_split[2])(self.options, self.config, self.df, self.vizgraph, self.storage, self.sample_json)
 
-    def get_states(self):
+    def get_states(self, pre):
         return []
     
     def pick(self, choices, pd=None):
