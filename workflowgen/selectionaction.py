@@ -157,7 +157,7 @@ class SelectionAction(BaseAction):
                 format = "%Y-%m-%d %H:%M:%S"
                 date1 = datetime.strptime(all_bins[selected_bins[0]][:-6], "%Y-%m-%d %H:%M:%S")
                 date2 = datetime.strptime(all_bins[selected_bins[1]][:-6], "%Y-%m-%d %H:%M:%S")
-                filters.append("%s BETWEEN %s and %s" % (dim, date1, date2))
+                filters.append("%s BETWEEN '%s' and '%s'" % (dim, date1, date2))
             filter_per_dim.append(" or ".join(filters))
         filter_per_dim = ["%s" % f for f in filter_per_dim]
 
